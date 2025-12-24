@@ -1,17 +1,39 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-// Fix: Corrected import path for Church type
-import { Church } from "../types";
+import type { Church } from "../types";
 
-// Initialize the GoogleGenAI client as per the coding guidelines.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Check for API key at runtime
+const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+
+if (!GEMINI_API_KEY) {
+  console.warn('GEMINI_API_KEY is not set. Some features may not work.');
+}
+
+// Initialize the GoogleGenAI client only if API key is available
+const ai = GEMINI_API_KEY ? new GoogleGenAI({ apiKey: GEMINI_API_KEY }) : null;
 
 /**
  * Generates a prayer suggestion based on a user-provided topic using the Gemini API.
  * @param topic The topic for the prayer.
  * @returns A string containing the prayer suggestion, or an error message.
  */
+type GenerateContentResponse = {
+    candidates: Array<{
+        content: {
+            parts: Array<{ text: string }>;
+        };
+    }>;
+};
+
 export const generatePrayerSuggestion = async (topic: string): Promise<string> => {
+    if (!ai) {
+        throw new Error('Gemini API is not configured. Please check your environment variables.');
+    }
+    
+    if (!topic?.trim()) {
+        return 'Please provide a valid topic for the prayer.';
+    }
+    
     try {
         const prompt = `Write a short, heartfelt prayer suggestion about the following topic: "${topic}". Keep it under 50 words. The prayer should be encouraging and hopeful.`;
 
@@ -25,7 +47,7 @@ export const generatePrayerSuggestion = async (topic: string): Promise<string> =
             }
         });
 
-        const text = response.text;
+        const text = response.candidates[0].content.parts[0].text;
         
         if (!text) {
             return "Sorry, I couldn't come up with a suggestion right now. Please try again.";
@@ -52,26 +74,10 @@ export const findChurchesByQuery = async (query: string): Promise<Church[]> => {
             contents: prompt,
             config: {
                 responseMimeType: "application/json",
-                responseSchema: {
-                    type: Type.ARRAY,
-                    items: {
-                        type: Type.OBJECT,
-                        properties: {
-                            id: { type: Type.NUMBER },
-                            name: { type: Type.STRING },
-                            city: { type: Type.STRING },
-                            country: { type: Type.STRING },
-                            pincode: { type: Type.STRING },
-                            lat: { type: Type.NUMBER },
-                            lng: { type: Type.NUMBER },
-                        },
-                        required: ["id", "name", "city", "country", "pincode", "lat", "lng"],
-                    },
-                },
             },
         });
         
-        const text = response.text.trim();
+        const text = response.candidates[0].content.parts[0].text.trim();
         if (!text) {
             return [];
         }
@@ -92,9 +98,15 @@ export const findChurchesByQuery = async (query: string): Promise<Church[]> => {
  * @param text The text content of the post to moderate.
  * @returns An object indicating if the post is a prayer request and appropriate.
  */
+interface ModerationResult {
+    isPrayerRequest: boolean;
+    isAppropriate: boolean;
+    reason: string;
+}
+
 export const moderatePrayerRequest = async (
     text: string
-): Promise<{ isPrayerRequest: boolean; isAppropriate: boolean; reason: string }> => {
+): Promise<ModerationResult> => {
     try {
         const prompt = `You are a strict but fair content moderator for a Christian prayer app.
         Your task is to determine if the following text is a genuine prayer request, a message of thanksgiving, or spiritual praise.
