@@ -1,0 +1,9 @@
+{
+  "name": "Faith Connect",
+  "description": "A digital sanctuary where Christians can share prayer requests, support one another through prayer, and find encouragement. This application provides a safe and inspiring space for the global Christian community to connect on a spiritual level.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
+}
